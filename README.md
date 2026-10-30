@@ -2,7 +2,7 @@
 
 A câmera do ESP32-CAM lê o QR. A biblioteca devolve a palavra que está escrita nele. O movimento do robô não vem pronto: comparar a palavra e andar é código de vocês.
 
-A classe da aula é `LeitorQR`. O arquivo do `#include` continua `ESP32QRCodeReader.h`.
+A classe é `LeitorQR`. O arquivo do `#include` continua `ESP32QRCodeReader.h`.
 
 ## Sketch
 
