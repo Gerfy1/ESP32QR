@@ -60,4 +60,23 @@ public:
   void setDebug(bool);
 };
 
+// API curta para aula. ligar() inicia a camera. ler() devolve a palavra
+// uma vez; a mesma palavra so volta depois que o QR sai da cena.
+class LeitorQR
+{
+private:
+  ESP32QRCodeReader nucleo;
+  String ultima;
+  bool segurando;
+  unsigned long vistoEm;
+  bool ligado;
+
+public:
+  LeitorQR();
+  LeitorQR(CameraPins pinos);
+
+  bool ligar();
+  String ler();
+};
+
 #endif // ESP32_QR_CODE_ARDUINO_H_

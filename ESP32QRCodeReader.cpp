@@ -205,14 +205,16 @@ void qrCodeDetectTask(void *taskData)
       {
         const char *error = quirc_strerror(err);
         int len = strlen(error);
+        if (len > 1023)
+        {
+          len = 1023;
+        }
         if (self->debug)
         {
           Serial.printf("Decoding FAILED: %s\n", error);
         }
-        for (int i = 0; i < len; i++)
-        {
-          qrCodeData.payload[i] = error[i];
-        }
+        qrCodeData.dataType = 0;
+        memcpy(qrCodeData.payload, error, len);
         qrCodeData.valid = false;
         qrCodeData.payload[len] = '\0';
         qrCodeData.payloadLen = len;
@@ -225,18 +227,22 @@ void qrCodeDetectTask(void *taskData)
           dumpData(&data);
         }
 
-        qrCodeData.dataType = data.data_type;
-        for (int i = 0; i < data.payload_len; i++)
+        int n = data.payload_len;
+        if (n < 0)
         {
-          qrCodeData.payload[i] = data.payload[i];
+          n = 0;
         }
+        if (n > 1023)
+        {
+          n = 1023;
+        }
+        qrCodeData.dataType = data.data_type;
+        memcpy(qrCodeData.payload, data.payload, n);
         qrCodeData.valid = true;
-        qrCodeData.payload[data.payload_len] = '\0';
-        qrCodeData.payloadLen = data.payload_len;
+        qrCodeData.payload[n] = '\0';
+        qrCodeData.payloadLen = n;
       }
       xQueueSend(self->qrCodeQueue, &qrCodeData, (TickType_t)0);
-
-      Serial.println();
     }
 
     //Serial.printf("finish recoginize\r\n");
@@ -284,4 +290,102 @@ void ESP32QRCodeReader::end()
 void ESP32QRCodeReader::setDebug(bool on)
 {
   debug = on;
+}
+
+static const unsigned long QR_AUSENCIA_MS = 800;
+
+static String textoDoPayload(const struct QRCodeData *data)
+{
+  int n = data->payloadLen;
+  if (n < 0)
+  {
+    n = 0;
+  }
+  if (n > 1023)
+  {
+    n = 1023;
+  }
+  char tmp[1024];
+  memcpy(tmp, data->payload, n);
+  tmp[n] = '\0';
+  return String(tmp);
+}
+
+LeitorQR::LeitorQR() : LeitorQR(CAMERA_MODEL_AI_THINKER)
+{
+}
+
+LeitorQR::LeitorQR(CameraPins pinos)
+    : nucleo(pinos), ultima(""), segurando(false), vistoEm(0), ligado(false)
+{
+}
+
+bool LeitorQR::ligar()
+{
+  if (ligado)
+  {
+    return true;
+  }
+
+  QRCodeReaderSetupErr err = nucleo.setup();
+  if (err == SETUP_NO_PSRAM_ERROR)
+  {
+    Serial.println("LeitorQR: placa sem PSRAM.");
+    return false;
+  }
+  if (err != SETUP_OK)
+  {
+    Serial.println("LeitorQR: camera nao iniciou. Confira o modelo da placa.");
+    return false;
+  }
+
+  nucleo.begin();
+  ligado = true;
+  Serial.println("LeitorQR pronto.");
+  return true;
+}
+
+String LeitorQR::ler()
+{
+  if (!ligado)
+  {
+    return "";
+  }
+
+  struct QRCodeData data;
+  bool chegou = false;
+  String recente = "";
+
+  while (nucleo.receiveQrCode(&data, 0))
+  {
+    if (!data.valid || data.payloadLen <= 0)
+    {
+      continue;
+    }
+    recente = textoDoPayload(&data);
+    if (recente.length() == 0)
+    {
+      continue;
+    }
+    chegou = true;
+  }
+
+  if (chegou)
+  {
+    vistoEm = millis();
+    if (segurando && recente == ultima)
+    {
+      return "";
+    }
+    segurando = true;
+    ultima = recente;
+    return recente;
+  }
+
+  if (segurando && (millis() - vistoEm) > QR_AUSENCIA_MS)
+  {
+    segurando = false;
+    ultima = "";
+  }
+  return "";
 }
